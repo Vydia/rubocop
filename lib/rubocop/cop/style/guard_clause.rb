@@ -101,6 +101,8 @@ module RuboCop
         MSG = 'Use a guard clause (`%<example>s`) instead of wrapping the ' \
               'code inside a conditional expression.'
 
+        MULTILINE_MSG = 'Unnecessary `else` after `%<scope_exiting_keyword>s`.'
+
         def on_def(node)
           body = node.body
 
@@ -113,19 +115,29 @@ module RuboCop
         def on_if(node)
           return if accepted_form?(node)
 
-          if (guard_clause = node.if_branch&.guard_clause?)
+          multiline = false
+
+          if (guard_clause = node.if_branch&.multiline_guard_clause?)
             kw = node.loc.keyword.source
             guard = :if
-          elsif (guard_clause = node.else_branch&.guard_clause?)
+          elsif (guard_clause = node.else_branch&.multiline_guard_clause?)
             kw = node.inverse_keyword
             guard = :else
+          elsif (last = node.if_branch&.children&.last) && last&.respond_to?(:return_type?) && last&.return_type? # TODO: Handle `break`, `next`, etc.
+            kw = node.loc.keyword.source
+            guard = :if
+            multiline = true
           else
             return
           end
 
-          guard = nil if and_or_guard_clause?(guard_clause)
+          guard = nil if guard_clause && and_or_guard_clause?(guard_clause)
 
-          register_offense(node, guard_clause_source(guard_clause), kw, guard)
+          if multiline
+            register_offense(node, 'return', kw, guard, multiline: true)
+          else
+            register_offense(node, guard_clause_source(guard_clause), kw, guard)
+          end
         end
 
         private
@@ -159,9 +171,29 @@ module RuboCop
           end
         end
 
-        def register_offense(node, scope_exiting_keyword, conditional_keyword, guard = nil)
+        def register_offense(node, scope_exiting_keyword, conditional_keyword, guard = nil,
+                             multiline: false)
           condition, = node.node_parts
           example = [scope_exiting_keyword, conditional_keyword, condition.source].join(' ')
+
+          if multiline
+            add_offense(
+              node.loc.keyword,
+              message: format(MULTILINE_MSG, scope_exiting_keyword: scope_exiting_keyword)
+            ) do |corrector|
+              next if node.else? && guard.nil?
+
+              replacement = <<~RUBY.chomp
+                #{conditional_keyword} #{condition.source}
+                  #{node.if_branch.source}
+                end
+              RUBY
+
+              autocorrect(corrector, node, condition, replacement, guard)
+            end
+            return
+          end
+
           if too_long_for_single_line?(node, example)
             return if trivial?(node)
 
