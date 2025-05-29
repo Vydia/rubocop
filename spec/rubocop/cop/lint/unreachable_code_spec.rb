@@ -14,6 +14,31 @@ RSpec.describe RuboCop::Cop::Lint::UnreachableCode, :config do
     head + body + tail
   end
 
+  it 'registers an offense when using if / else with multiple lines' do
+    expect_offense(<<~RUBY)
+      def func
+        if something
+        ^^ Unnecessary 'else' after 'return'
+          work1
+          return work2
+        else
+          work3
+        end
+      end
+    RUBY
+
+    expect_correction(<<~RUBY)
+      def func
+        if something
+          work1
+          return work2
+        end
+
+        work3
+      end
+    RUBY
+  end
+
   %w[return next break retry redo throw raise fail exit exit! abort].each do |t|
     it "registers an offense for `#{t}` before other statements" do
       expect_offense(wrap(<<~RUBY))
