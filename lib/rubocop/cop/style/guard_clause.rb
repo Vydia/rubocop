@@ -117,10 +117,10 @@ module RuboCop
 
           multiline = false
 
-          if (guard_clause = node.if_branch&.multiline_guard_clause?)
+          if (guard_clause = node.if_branch&.guard_clause?)
             kw = node.loc.keyword.source
             guard = :if
-          elsif (guard_clause = node.else_branch&.multiline_guard_clause?)
+          elsif (guard_clause = node.else_branch&.guard_clause?)
             kw = node.inverse_keyword
             guard = :else
           elsif (last = node.if_branch&.children&.last) && last&.respond_to?(:return_type?) && last&.return_type? # TODO: Handle `break`, `next`, etc.
